@@ -696,10 +696,14 @@ omz_sync_bootstrap_first_time() {
   local tracked_list
   tracked_list="$(omz_sync_expand_tracked_paths)" || return 1
   print -r -- "$tracked_list" | omz_sync_copy_local_to_repo
-  omz_sync_commit_and_push "initial sync" || {
-    omz_sync_warn "Initial push failed. Ensure repo exists and auth is configured."
-  }
-  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" != "1" ]]; then
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" == "1" ]]; then
+    omz_sync_commit_and_push "initial sync" || {
+      omz_sync_warn "Initial publish failed. Ensure repo exists and auth is configured."
+    }
+  else
+    omz_sync_commit_and_push "initial local sync" || {
+      omz_sync_warn "Initial local snapshot commit failed. Configure git user.name and user.email, then retry."
+    }
     omz_sync_log "Publish skipped. Local sync repo initialized; enable publishing later to share across machines."
   fi
   omz_sync_setup_state_clear

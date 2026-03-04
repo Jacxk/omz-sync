@@ -22,6 +22,22 @@
 
 You can edit tracked paths in `~/.config/omz-sync/tracked_paths`.
 
+## Where sync repo is stored
+
+The local git repo used by `omz-sync` is saved at:
+
+- `~/.local/share/omz-sync/repo`
+
+Useful paths:
+- installed loader script: `~/.local/share/omz-sync/omz-sync.zsh`
+- config/state files: `~/.config/omz-sync/`
+
+Quick check:
+
+```bash
+git -C ~/.local/share/omz-sync/repo status
+```
+
 ## Install into your home directory
 
 From this repo:
