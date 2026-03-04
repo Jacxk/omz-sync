@@ -40,7 +40,11 @@ omz_sync_prompt() {
   fi
   while true; do
     print -n -- "[omz-sync] $question $suffix "
-    read -r answer
+    if ! read -r answer; then
+      print
+      omz_sync_warn "Input unavailable; using default '$default'."
+      answer="$default"
+    fi
     answer="${answer:l}"
     if [[ -z "$answer" ]]; then
       answer="$default"
@@ -62,7 +66,11 @@ omz_sync_read_value() {
   else
     print -n -- "[omz-sync] $question "
   fi
-  read -r answer
+  if ! read -r answer; then
+    print
+    omz_sync_warn "Input unavailable for prompt: $question"
+    return 1
+  fi
   if [[ -z "$answer" ]]; then
     answer="$default_value"
   fi
@@ -395,6 +403,11 @@ omz_sync_build_remote_url() {
   print -r -- "$base/$repo_slug.git"
 }
 
+omz_sync_validate_repo_slug() {
+  local repo_slug="$1"
+  [[ "$repo_slug" == */* && "$repo_slug" != */ && "$repo_slug" != /* ]]
+}
+
 omz_sync_bootstrap_first_time() {
   omz_sync_log "First-time setup"
   local has_repo repo_slug branch visibility create_ok
@@ -407,15 +420,24 @@ omz_sync_bootstrap_first_time() {
 
   if (( has_repo == 1 )); then
     while true; do
-      repo_slug="$(omz_sync_read_value "Enter repo as owner/name (for example: yanluis/omz-sync)")"
-      [[ -z "$repo_slug" ]] && continue
+      if ! repo_slug="$(omz_sync_read_value "Enter repo as owner/name (for example: yanluis/omz-sync)")"; then
+        return 1
+      fi
+      if [[ -z "$repo_slug" ]]; then
+        omz_sync_warn "Repository cannot be empty. Example: yanluis/omz-sync"
+        continue
+      fi
+      if ! omz_sync_validate_repo_slug "$repo_slug"; then
+        omz_sync_warn "Invalid repo format. Use owner/name (for example: yanluis/omz-sync)."
+        continue
+      fi
       OMZ_SYNC_REMOTE_URL="$(omz_sync_build_remote_url "$repo_slug")"
       if git ls-remote "$OMZ_SYNC_REMOTE_URL" >/dev/null 2>&1; then
         break
       fi
       omz_sync_warn "Could not access $OMZ_SYNC_REMOTE_URL. Check name/access and try again."
     done
-    branch="$(omz_sync_read_value "Branch name" "$default_branch")"
+    branch="$(omz_sync_read_value "Branch name" "$default_branch")" || return 1
     OMZ_SYNC_REPO_SLUG="$repo_slug"
     OMZ_SYNC_BRANCH="$branch"
     omz_sync_write_config || return 1
@@ -429,9 +451,25 @@ omz_sync_bootstrap_first_time() {
 
   local guessed_owner
   guessed_owner="$(git config --global github.user 2>/dev/null)"
-  repo_slug="$(omz_sync_read_value "New repo slug owner/name" "${guessed_owner:-your-user}/omz-sync")"
-  branch="$(omz_sync_read_value "Branch name" "$default_branch")"
-  visibility="$(omz_sync_read_value "Repo visibility (private/public)" "private")"
+  omz_sync_log "No existing repo selected. Enter the repo to create/use for first sync."
+  while true; do
+    repo_slug="$(omz_sync_read_value "New repo slug owner/name" "${guessed_owner}/omz-sync")" || return 1
+    if [[ -z "$repo_slug" ]]; then
+      omz_sync_warn "Repository cannot be empty. Use owner/name."
+      continue
+    fi
+    if [[ "$repo_slug" == "your-user/omz-sync" || "$repo_slug" == your-user/* ]]; then
+      omz_sync_warn "Replace placeholder 'your-user' with your real GitHub username."
+      continue
+    fi
+    if ! omz_sync_validate_repo_slug "$repo_slug"; then
+      omz_sync_warn "Invalid repo format. Use owner/name (for example: yanluis/omz-sync)."
+      continue
+    fi
+    break
+  done
+  branch="$(omz_sync_read_value "Branch name" "$default_branch")" || return 1
+  visibility="$(omz_sync_read_value "Repo visibility (private/public)" "private")" || return 1
   OMZ_SYNC_REPO_SLUG="$repo_slug"
   OMZ_SYNC_BRANCH="$branch"
   OMZ_SYNC_REMOTE_URL="$(omz_sync_build_remote_url "$repo_slug")"

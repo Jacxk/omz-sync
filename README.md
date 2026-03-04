@@ -30,12 +30,19 @@ From this repo:
 zsh ./scripts/install-omz-sync.zsh
 ```
 
-Then add this to your `~/.zshrc`:
+The installer asks whether it should add the snippet to `~/.zshrc` automatically.
+If you choose no, add this manually:
 
 ```zsh
 if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
   source "$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
+```
+
+After install, load it in the current shell:
+
+```bash
+source ~/.zshrc
 ```
 
 ## First-run behavior
