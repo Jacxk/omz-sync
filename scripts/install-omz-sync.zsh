@@ -9,6 +9,9 @@ INSTALL_DIR="${OMZ_SYNC_INSTALL_DIR:-$HOME/.local/share/omz-sync}"
 INSTALLED_SCRIPT="$INSTALL_DIR/omz-sync.zsh"
 SNIPPET_FILE="$INSTALL_DIR/zshrc.snippet.zsh"
 ZSHRC_FILE="$HOME/.zshrc"
+SNIPPET_ADDED=0
+SNIPPET_ALREADY_PRESENT=0
+SHOW_MANUAL_SNIPPET=0
 
 if [[ ! -f "$SOURCE_SCRIPT" ]]; then
   echo "[omz-sync installer] missing source script: $SOURCE_SCRIPT" >&2
@@ -39,26 +42,43 @@ if [[ "${ADD_SNIPPET:l}" == "y" || "${ADD_SNIPPET:l}" == "yes" ]]; then
   ZSHRC_CONTENT="$(<"$ZSHRC_FILE")"
   if [[ "$ZSHRC_CONTENT" == *'source "$HOME/.local/share/omz-sync/omz-sync.zsh"'* ]]; then
     echo "[omz-sync installer] Snippet already present in $ZSHRC_FILE"
+    SNIPPET_ALREADY_PRESENT=1
   else
     {
       echo
       cat "$SNIPPET_FILE"
     } >> "$ZSHRC_FILE"
     echo "[omz-sync installer] Snippet added to $ZSHRC_FILE"
+    SNIPPET_ADDED=1
   fi
 else
   echo "[omz-sync installer] Skipped automatic snippet insertion."
+  SHOW_MANUAL_SNIPPET=1
 fi
 
-cat <<EOF
-[omz-sync installer] Installed script to:
-  $INSTALLED_SCRIPT
-
+if (( SHOW_MANUAL_SNIPPET == 1 )); then
+  cat <<EOF
 Add this snippet to your ~/.zshrc:
 
 if [[ -f "\$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
   source "\$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
+EOF
+  echo
+elif (( SNIPPET_ADDED == 1 || SNIPPET_ALREADY_PRESENT == 1 )); then
+  cat <<EOF
+Snippet used for ~/.zshrc:
+
+if [[ -f "\$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  source "\$HOME/.local/share/omz-sync/omz-sync.zsh"
+fi
+EOF
+  echo
+fi
+
+cat <<EOF
+[omz-sync installer] Installed script to:
+  $INSTALLED_SCRIPT
 
 The snippet has also been written to:
   $SNIPPET_FILE
