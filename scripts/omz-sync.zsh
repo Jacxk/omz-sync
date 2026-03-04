@@ -26,6 +26,7 @@ typeset -g OMZ_SYNC_DEBOUNCE_SECONDS="${OMZ_SYNC_DEBOUNCE_SECONDS:-30}"
 typeset -g OMZ_SYNC_HOOKS_REGISTERED="${OMZ_SYNC_HOOKS_REGISTERED:-0}"
 typeset -g OMZ_SYNC_READ_VALUE=""
 typeset -g OMZ_SYNC_PUBLISH_ENABLED="${OMZ_SYNC_PUBLISH_ENABLED:-1}"
+typeset -g OMZ_SYNC_ACTIVE_BACKUP_ROOT=""
 
 omz_sync_log() {
   print -r -- "[omz-sync] $*"
@@ -157,6 +158,10 @@ omz_sync_expand_tracked_paths() {
   local -A seen
   local p
   for p in "${results[@]}"; do
+    # File-level sync avoids repeated directory-only prompts/noise.
+    if [[ -d "$p" ]]; then
+      continue
+    fi
     if [[ -z "${seen[$p]:-}" ]]; then
       seen[$p]=1
       print -r -- "$p"
@@ -185,12 +190,21 @@ omz_sync_copy_local_to_repo() {
 
 omz_sync_backup_local_path() {
   local local_path="$1"
-  local backup_root="$OMZ_SYNC_CONFIG_HOME/backups/$(date +%Y%m%d-%H%M%S)"
+  local quiet="${2:-0}"
+  local backup_root
+  if [[ -n "$OMZ_SYNC_ACTIVE_BACKUP_ROOT" ]]; then
+    backup_root="$OMZ_SYNC_ACTIVE_BACKUP_ROOT"
+  else
+    backup_root="$OMZ_SYNC_CONFIG_HOME/backups/$(date +%Y%m%d-%H%M%S)"
+    OMZ_SYNC_ACTIVE_BACKUP_ROOT="$backup_root"
+  fi
   local backup_path="$backup_root/${local_path#$HOME/}"
   if [[ -e "$local_path" ]]; then
     mkdir -p "${backup_path:h}" || return 1
     cp -f "$local_path" "$backup_path" || return 1
-    omz_sync_log "Backup saved: $backup_path"
+    if [[ "$quiet" != "1" ]]; then
+      omz_sync_log "Backup saved: $backup_path"
+    fi
   fi
   return 0
 }
@@ -219,20 +233,42 @@ omz_sync_show_changes_vs_repo() {
 
 omz_sync_apply_repo_to_local() {
   local local_path repo_path
+  local -a delete_candidates
+  local copied_count=0
+  local deleted_count=0
+  OMZ_SYNC_ACTIVE_BACKUP_ROOT=""
+
   while IFS= read -r local_path || [[ -n "$local_path" ]]; do
     [[ -z "$local_path" ]] && continue
     repo_path="$(omz_sync_repo_path_for_local "$local_path")"
     if [[ -f "$repo_path" ]]; then
-      omz_sync_backup_local_path "$local_path" || return 1
+      if [[ -f "$local_path" ]] && cmp -s "$repo_path" "$local_path"; then
+        continue
+      fi
+      omz_sync_backup_local_path "$local_path" 1 || return 1
       omz_sync_mkdir_parent "$local_path"
       cp -f "$repo_path" "$local_path" || return 1
-    elif [[ ! -e "$repo_path" && -e "$local_path" ]]; then
-      if omz_sync_prompt "Delete local file not present in remote: ${local_path#$HOME/}?" "n"; then
-        omz_sync_backup_local_path "$local_path" || return 1
-        rm -f "$local_path" || return 1
-      fi
+      copied_count=$((copied_count + 1))
+    elif [[ ! -e "$repo_path" && -f "$local_path" ]]; then
+      delete_candidates+=("$local_path")
     fi
   done
+
+  if (( ${#delete_candidates[@]} > 0 )); then
+    omz_sync_log "Remote is missing ${#delete_candidates[@]} local tracked file(s)."
+    if omz_sync_prompt "Delete these local files to match remote state?" "n"; then
+      for local_path in "${delete_candidates[@]}"; do
+        omz_sync_backup_local_path "$local_path" 1 || return 1
+        rm -f "$local_path" || return 1
+        deleted_count=$((deleted_count + 1))
+      done
+    fi
+  fi
+
+  if [[ -n "$OMZ_SYNC_ACTIVE_BACKUP_ROOT" ]]; then
+    omz_sync_log "Backups saved to $OMZ_SYNC_ACTIVE_BACKUP_ROOT (updated: $copied_count, deleted: $deleted_count)"
+  fi
+  OMZ_SYNC_ACTIVE_BACKUP_ROOT=""
 }
 
 omz_sync_fetch_remote() {
