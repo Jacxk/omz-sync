@@ -13,6 +13,49 @@ SNIPPET_ADDED=0
 SNIPPET_ALREADY_PRESENT=0
 SHOW_MANUAL_SNIPPET=0
 
+usage() {
+  cat <<'EOF'
+Usage: zsh ./scripts/install-omz-sync.zsh [--help]
+
+Installs omz-sync into your home directory and offers to add
+the bootstrap snippet to ~/.zshrc.
+
+Environment variables:
+  OMZ_SYNC_INSTALL_DIR   Install location (default: ~/.local/share/omz-sync)
+
+Examples:
+  zsh ./scripts/install-omz-sync.zsh
+  OMZ_SYNC_INSTALL_DIR="$HOME/.local/opt/omz-sync" zsh ./scripts/install-omz-sync.zsh
+EOF
+}
+
+render_snippet() {
+  cat <<EOF
+# omz-sync bootstrap
+_omz_sync_install_dir="\${OMZ_SYNC_INSTALL_DIR:-$INSTALL_DIR}"
+if [[ -f "\$_omz_sync_install_dir/omz-sync.zsh" ]]; then
+  # Allow re-running setup in the same shell after uninstall/reset.
+  unset OMZ_SYNC_LOADED
+  source "\$_omz_sync_install_dir/omz-sync.zsh"
+fi
+unset _omz_sync_install_dir
+EOF
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[omz-sync installer] Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
 prompt_yes_no() {
   local question="$1"
   local default="${2:-y}"
@@ -46,25 +89,14 @@ mkdir -p "$INSTALL_DIR"
 cp -f "$SOURCE_SCRIPT" "$INSTALLED_SCRIPT"
 chmod +x "$INSTALLED_SCRIPT"
 
-cat > "$SNIPPET_FILE" <<'EOF'
-# omz-sync bootstrap
-if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
-  # Allow re-running setup in the same shell after uninstall/reset.
-  unset OMZ_SYNC_LOADED
-  source "$HOME/.local/share/omz-sync/omz-sync.zsh"
-fi
-EOF
+render_snippet > "$SNIPPET_FILE"
 
 echo
 cat <<'EOF'
 [omz-sync installer] Snippet that can be added to ~/.zshrc:
-
-if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
-  # Allow re-running setup in the same shell after uninstall/reset.
-  unset OMZ_SYNC_LOADED
-  source "$HOME/.local/share/omz-sync/omz-sync.zsh"
-fi
 EOF
+echo
+render_snippet
 echo
 if prompt_yes_no "Do you want to add the snippet to $ZSHRC_FILE automatically?" "y"; then
   if [[ ! -f "$ZSHRC_FILE" ]]; then
@@ -72,7 +104,9 @@ if prompt_yes_no "Do you want to add the snippet to $ZSHRC_FILE automatically?" 
   fi
 
   ZSHRC_CONTENT="$(<"$ZSHRC_FILE")"
-  if [[ "$ZSHRC_CONTENT" == *'source "$HOME/.local/share/omz-sync/omz-sync.zsh"'* ]]; then
+  if [[ "$ZSHRC_CONTENT" == *'# omz-sync bootstrap'* ]] \
+    || [[ "$ZSHRC_CONTENT" == *'source "$HOME/.local/share/omz-sync/omz-sync.zsh"'* ]] \
+    || [[ "$ZSHRC_CONTENT" == *'source "$_omz_sync_install_dir/omz-sync.zsh"'* ]]; then
     echo "[omz-sync installer] Snippet already present in $ZSHRC_FILE"
     SNIPPET_ALREADY_PRESENT=1
   else

@@ -27,6 +27,33 @@ typeset -g OMZ_SYNC_HOOKS_REGISTERED="${OMZ_SYNC_HOOKS_REGISTERED:-0}"
 typeset -g OMZ_SYNC_READ_VALUE=""
 typeset -g OMZ_SYNC_PUBLISH_ENABLED="${OMZ_SYNC_PUBLISH_ENABLED:-1}"
 typeset -g OMZ_SYNC_ACTIVE_BACKUP_ROOT=""
+typeset -g OMZ_SYNC_EXECUTED_DIRECTLY=0
+if [[ "${(%):-%N}" == "$0" ]]; then
+  OMZ_SYNC_EXECUTED_DIRECTLY=1
+fi
+
+omz_sync_usage() {
+  cat <<'EOF'
+Usage:
+  source ~/.local/share/omz-sync/omz-sync.zsh
+  zsh ./scripts/omz-sync.zsh --help
+
+Description:
+  Syncs tracked Oh My Zsh files with a git repository.
+  The script is intended to be sourced from ~/.zshrc.
+
+Key environment variables:
+  OMZ_SYNC_CONFIG_HOME        Config/state directory (default: ~/.config/omz-sync)
+  OMZ_SYNC_DATA_HOME          Data directory (default: ~/.local/share/omz-sync)
+  OMZ_SYNC_REPO_DIR           Local sync repository path (default: $OMZ_SYNC_DATA_HOME/repo)
+  OMZ_SYNC_GIT_HOST_BASE      Git host base URL (default: https://github.com)
+  OMZ_SYNC_DISABLE_AUTO_INIT  Set to 1 to disable auto initialization
+  OMZ_SYNC_DEBOUNCE_SECONDS   Commit debounce interval in seconds (default: 30)
+
+Helpful runtime command:
+  omz_sync_reset_setup_state
+EOF
+}
 
 omz_sync_log() {
   print -r -- "[omz-sync] $*"
@@ -87,7 +114,7 @@ omz_sync_read_value() {
 omz_sync_require_cmd() {
   local cmd="$1"
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    omz_sync_warn "Required command not found: $cmd"
+    omz_sync_warn "Required command not found: $cmd. Install '$cmd' and restart your shell."
     return 1
   fi
   return 0
@@ -387,6 +414,8 @@ omz_sync_sync_local_changes() {
   print -r -- "$tracked_list" | omz_sync_copy_local_to_repo
   if omz_sync_commit_and_push "local change"; then
     OMZ_SYNC_LAST_COMMIT_EPOCH="$now"
+  else
+    omz_sync_warn "Could not commit/push local changes. Run: git -C \"$OMZ_SYNC_REPO_DIR\" status"
   fi
   omz_sync_release_lock
 }
@@ -398,7 +427,7 @@ omz_sync_startup_pull_flow() {
   fi
 
   omz_sync_fetch_remote || {
-    omz_sync_warn "Could not fetch remote repository."
+    omz_sync_warn "Could not fetch remote repository. Run: git -C \"$OMZ_SYNC_REPO_DIR\" fetch origin --prune"
     omz_sync_release_lock
     return 1
   }
@@ -412,7 +441,7 @@ omz_sync_startup_pull_flow() {
   fi
 
   if [[ -n "$remote_head" && "$remote_head" != "$local_head" ]]; then
-    omz_sync_checkout_remote_branch || omz_sync_warn "Remote checkout/pull failed."
+    omz_sync_checkout_remote_branch || omz_sync_warn "Remote checkout failed. Run: git -C \"$OMZ_SYNC_REPO_DIR\" checkout \"$OMZ_SYNC_BRANCH\""
   fi
 
   local tracked_list
@@ -428,7 +457,7 @@ omz_sync_startup_pull_flow() {
     print -r -- "$changes"
     if [[ "$auto_apply" == "1" ]] || omz_sync_prompt "Load saved version from GitHub into this machine now?" "n"; then
       print -r -- "$tracked_list" | omz_sync_apply_repo_to_local || {
-        omz_sync_warn "Failed while applying remote files."
+        omz_sync_warn "Failed while applying remote files. Check permissions under $HOME and review backups in $OMZ_SYNC_CONFIG_HOME/backups/."
       }
     fi
   elif [[ -n "$remote_head" && "$remote_head" != "$last_seen" ]]; then
@@ -541,13 +570,19 @@ omz_sync_init_repo_if_needed() {
     return 0
   fi
   if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" == "1" && -n "${OMZ_SYNC_REMOTE_URL:-}" ]]; then
-    git clone "$OMZ_SYNC_REMOTE_URL" "$OMZ_SYNC_REPO_DIR" >/dev/null 2>&1 && return 0
+    if git clone "$OMZ_SYNC_REMOTE_URL" "$OMZ_SYNC_REPO_DIR" >/dev/null 2>&1; then
+      return 0
+    fi
+    omz_sync_warn "Could not clone $OMZ_SYNC_REMOTE_URL. Check repository access and run: git ls-remote \"$OMZ_SYNC_REMOTE_URL\""
   fi
   {
     mkdir -p "$OMZ_SYNC_REPO_DIR" || return 1
     (
       cd "$OMZ_SYNC_REPO_DIR" || return 1
-      git init -b "$OMZ_SYNC_BRANCH" >/dev/null 2>&1 || return 1
+      git init -b "$OMZ_SYNC_BRANCH" >/dev/null 2>&1 || {
+        omz_sync_warn "Could not initialize local repo at $OMZ_SYNC_REPO_DIR."
+        return 1
+      }
       if [[ -n "${OMZ_SYNC_REMOTE_URL:-}" ]]; then
         git remote add origin "$OMZ_SYNC_REMOTE_URL" >/dev/null 2>&1 || true
       fi
@@ -746,11 +781,11 @@ omz_sync_bootstrap_first_time() {
   print -r -- "$tracked_list" | omz_sync_copy_local_to_repo
   if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" == "1" ]]; then
     omz_sync_commit_and_push "initial sync" || {
-      omz_sync_warn "Initial publish failed. Ensure repo exists and auth is configured."
+      omz_sync_warn "Initial publish failed. Ensure repo exists/auth is configured, then run: git -C \"$OMZ_SYNC_REPO_DIR\" push origin \"$OMZ_SYNC_BRANCH\""
     }
   else
     omz_sync_commit_and_push "initial local sync" || {
-      omz_sync_warn "Initial local snapshot commit failed. Configure git user.name and user.email, then retry."
+      omz_sync_warn "Initial local snapshot commit failed. Configure git user.name/user.email, then run: git -C \"$OMZ_SYNC_REPO_DIR\" commit -m \"omz-sync: initial local sync\""
     }
     omz_sync_log "Publish skipped. Local sync repo initialized; enable publishing later to share across machines."
   fi
@@ -782,13 +817,13 @@ omz_sync_init() {
 
   if ! omz_sync_load_config; then
     omz_sync_bootstrap_first_time || {
-      omz_sync_warn "Setup did not complete."
+      omz_sync_warn "Setup did not complete. Reopen the shell to retry, or run: omz_sync_reset_setup_state"
       return 0
     }
   fi
 
   omz_sync_init_repo_if_needed || {
-    omz_sync_warn "Could not initialize local sync repo."
+    omz_sync_warn "Could not initialize local sync repo at $OMZ_SYNC_REPO_DIR."
     return 0
   }
   omz_sync_ensure_repo_identity "runtime" || return 0
@@ -805,6 +840,20 @@ omz_sync_init() {
     omz_sync_warn "add-zsh-hook unavailable; automatic periodic/exit sync disabled."
   fi
 }
+
+if (( OMZ_SYNC_EXECUTED_DIRECTLY == 1 )) && (( $# > 0 )); then
+  case "$1" in
+    -h|--help)
+      omz_sync_usage
+      exit 0
+      ;;
+    *)
+      omz_sync_warn "Unknown option: $1"
+      omz_sync_usage >&2
+      exit 1
+      ;;
+  esac
+fi
 
 if [[ "${OMZ_SYNC_DISABLE_AUTO_INIT:-0}" != "1" ]]; then
   omz_sync_init

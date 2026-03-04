@@ -5,7 +5,33 @@ set -euo pipefail
 INSTALL_DIR="${OMZ_SYNC_INSTALL_DIR:-$HOME/.local/share/omz-sync}"
 CONFIG_DIR="${OMZ_SYNC_CONFIG_HOME:-$HOME/.config/omz-sync}"
 ZSHRC_FILE="${OMZ_SYNC_ZSHRC_FILE:-$HOME/.zshrc}"
-SNIPPET_LINE='source "$HOME/.local/share/omz-sync/omz-sync.zsh"'
+
+usage() {
+  cat <<'EOF'
+Usage: zsh ./scripts/uninstall-omz-sync.zsh [--help]
+
+Interactively removes omz-sync bootstrap/config/install artifacts.
+
+Environment variables:
+  OMZ_SYNC_INSTALL_DIR   Installed files location (default: ~/.local/share/omz-sync)
+  OMZ_SYNC_CONFIG_HOME   Config/state location (default: ~/.config/omz-sync)
+  OMZ_SYNC_ZSHRC_FILE    zshrc path to edit (default: ~/.zshrc)
+EOF
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[omz-sync uninstall] Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 confirm() {
   local question="$1"
@@ -54,12 +80,12 @@ remove_snippet_from_zshrc() {
         next
       }
 
-      if ($0 ~ /^[[:space:]]*if[[:space:]]+\[\[[[:space:]]+-f[[:space:]]+"\$HOME\/\.local\/share\/omz-sync\/omz-sync\.zsh"[[:space:]]+\]\];[[:space:]]*then[[:space:]]*$/) {
+      if ($0 ~ /^[[:space:]]*if[[:space:]]+\[\[[[:space:]]+-f[[:space:]]+".*omz-sync\/omz-sync\.zsh"[[:space:]]+\]\];[[:space:]]*then[[:space:]]*$/) {
         in_block=1
         next
       }
 
-      if (index($0, "source \"$HOME/.local/share/omz-sync/omz-sync.zsh\"") > 0) {
+      if ($0 ~ /^[[:space:]]*source[[:space:]]+".*omz-sync\/omz-sync\.zsh"[[:space:]]*$/) {
         next
       }
 
