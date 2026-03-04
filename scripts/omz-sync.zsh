@@ -323,6 +323,18 @@ omz_sync_acquire_lock() {
     print -r -- "$$" > "$OMZ_SYNC_LOCK_DIR/pid"
     return 0
   fi
+  if [[ -f "$OMZ_SYNC_LOCK_DIR/pid" ]]; then
+    local lock_pid
+    lock_pid="$(<"$OMZ_SYNC_LOCK_DIR/pid")"
+    if [[ -z "$lock_pid" || ! "$lock_pid" =~ '^[0-9]+$' ]] || ! kill -0 "$lock_pid" >/dev/null 2>&1; then
+      rm -rf "$OMZ_SYNC_LOCK_DIR" 2>/dev/null || true
+      if mkdir "$OMZ_SYNC_LOCK_DIR" 2>/dev/null; then
+        print -r -- "$$" > "$OMZ_SYNC_LOCK_DIR/pid"
+        omz_sync_log "Recovered from stale lock state."
+        return 0
+      fi
+    fi
+  fi
   return 1
 }
 
