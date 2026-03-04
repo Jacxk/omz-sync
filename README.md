@@ -46,15 +46,29 @@ From this repo:
 zsh ./scripts/install-omz-sync.zsh
 ```
 
+Show usage/help:
+
+```bash
+zsh ./scripts/install-omz-sync.zsh --help
+```
+
+Optional custom install path:
+
+```bash
+OMZ_SYNC_INSTALL_DIR="$HOME/.local/opt/omz-sync" zsh ./scripts/install-omz-sync.zsh
+```
+
 The installer asks whether it should add the snippet to `~/.zshrc` automatically.
 If you choose no, add this manually:
 
 ```zsh
-if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+_omz_sync_install_dir="${OMZ_SYNC_INSTALL_DIR:-$HOME/.local/share/omz-sync}"
+if [[ -f "$_omz_sync_install_dir/omz-sync.zsh" ]]; then
   # Allow re-running setup in the same shell after uninstall/reset.
   unset OMZ_SYNC_LOADED
-  source "$HOME/.local/share/omz-sync/omz-sync.zsh"
+  source "$_omz_sync_install_dir/omz-sync.zsh"
 fi
+unset _omz_sync_install_dir
 ```
 
 After install, load it in the current shell:
@@ -69,6 +83,12 @@ Run:
 
 ```bash
 zsh ./scripts/uninstall-omz-sync.zsh
+```
+
+Show usage/help:
+
+```bash
+zsh ./scripts/uninstall-omz-sync.zsh --help
 ```
 
 The uninstaller interactively asks whether to:
