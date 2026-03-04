@@ -39,19 +39,22 @@ remove_snippet_from_zshrc() {
   awk '
     BEGIN {
       in_block=0
-      seen_header=0
     }
     {
       if (in_block == 1) {
-        if ($0 == "fi") {
+        if ($0 ~ /^[[:space:]]*fi[[:space:]]*$/) {
           in_block=0
           next
         }
         next
       }
 
-      if ($0 == "# omz-sync bootstrap") {
-        seen_header=1
+      if ($0 ~ /^[[:space:]]*# omz-sync bootstrap[[:space:]]*$/) {
+        in_block=1
+        next
+      }
+
+      if ($0 ~ /^[[:space:]]*if[[:space:]]+\[\[[[:space:]]+-f[[:space:]]+"\$HOME\/\.local\/share\/omz-sync\/omz-sync\.zsh"[[:space:]]+\]\];[[:space:]]*then[[:space:]]*$/) {
         in_block=1
         next
       }
