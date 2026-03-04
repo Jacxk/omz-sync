@@ -30,6 +30,14 @@ fi
 EOF
 
 echo
+cat <<'EOF'
+[omz-sync installer] Snippet that can be added to ~/.zshrc:
+
+if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  source "$HOME/.local/share/omz-sync/omz-sync.zsh"
+fi
+EOF
+echo
 echo "[omz-sync installer] Do you want to add the snippet to $ZSHRC_FILE automatically? [Y/n]"
 read -r ADD_SNIPPET
 ADD_SNIPPET="${ADD_SNIPPET:-y}"
