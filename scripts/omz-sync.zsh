@@ -609,16 +609,16 @@ omz_sync_bootstrap_first_time() {
         omz_sync_warn "Saved repo $repo_slug is not accessible anymore; please enter it again."
         repo_slug=""
       fi
-      if ! omz_sync_read_value "Enter existing sync repo as owner/name (for example: yanluis/omz-sync)"; then
+      if ! omz_sync_read_value "Enter existing sync repo as owner/name (for example: jacxk/omz-sync)"; then
         return 1
       fi
       repo_slug="$OMZ_SYNC_READ_VALUE"
       if [[ -z "$repo_slug" ]]; then
-        omz_sync_warn "Repository cannot be empty. Example: yanluis/omz-sync"
+        omz_sync_warn "Repository cannot be empty. Example: jacxk/omz-sync"
         continue
       fi
       if ! omz_sync_validate_repo_slug "$repo_slug"; then
-        omz_sync_warn "Invalid repo format. Use owner/name (for example: yanluis/omz-sync)."
+        omz_sync_warn "Invalid repo format. Use owner/name (for example: jacxk/omz-sync)."
         continue
       fi
       OMZ_SYNC_REMOTE_URL="$(omz_sync_build_remote_url "$repo_slug")"
@@ -670,7 +670,7 @@ omz_sync_bootstrap_first_time() {
         repo_slug=""
       fi
     fi
-    omz_sync_read_value "Sync repository slug (owner/name, for example: yanluis/omz-sync)" "${guessed_owner}/omz-sync" || return 1
+    omz_sync_read_value "Sync repository slug (owner/name, for example: jacxk/omz-sync)" "${guessed_owner}/omz-sync" || return 1
     repo_slug="$OMZ_SYNC_READ_VALUE"
     if [[ -z "$repo_slug" ]]; then
       omz_sync_warn "Repository cannot be empty. Use owner/name."
@@ -681,7 +681,7 @@ omz_sync_bootstrap_first_time() {
       continue
     fi
     if ! omz_sync_validate_repo_slug "$repo_slug"; then
-      omz_sync_warn "Invalid repo format. Use owner/name (for example: yanluis/omz-sync)."
+      omz_sync_warn "Invalid repo format. Use owner/name (for example: jacxk/omz-sync)."
       continue
     fi
     OMZ_SYNC_SETUP_REPO_SLUG="$repo_slug"
