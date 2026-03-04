@@ -35,6 +35,8 @@ If you choose no, add this manually:
 
 ```zsh
 if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  # Allow re-running setup in the same shell after uninstall/reset.
+  unset OMZ_SYNC_LOADED
   source "$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
 ```
@@ -57,6 +59,8 @@ The uninstaller interactively asks whether to:
 - remove the bootstrap snippet from `~/.zshrc`,
 - delete installed files in `~/.local/share/omz-sync`,
 - delete sync state in `~/.config/omz-sync` (including backups).
+
+All prompts accept `Y` or `N` (case-insensitive). Pressing Enter uses the default shown in the prompt.
 
 After uninstall, run:
 

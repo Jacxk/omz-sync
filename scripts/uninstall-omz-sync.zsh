@@ -108,7 +108,7 @@ else
 fi
 
 if [[ -d "$CONFIG_DIR" ]]; then
-  if confirm "Delete sync state in $CONFIG_DIR (includes backups)?" "n"; then
+  if confirm "Delete sync state in $CONFIG_DIR (includes backups)?" "y"; then
     rm -rf "$CONFIG_DIR"
     echo "[omz-sync uninstall] Deleted $CONFIG_DIR"
   fi

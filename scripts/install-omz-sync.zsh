@@ -13,6 +13,30 @@ SNIPPET_ADDED=0
 SNIPPET_ALREADY_PRESENT=0
 SHOW_MANUAL_SNIPPET=0
 
+prompt_yes_no() {
+  local question="$1"
+  local default="${2:-y}"
+  local suffix="[Y/n]"
+  local answer
+  if [[ "$default" == "n" ]]; then
+    suffix="[y/N]"
+  fi
+  while true; do
+    echo -n "[omz-sync installer] $question $suffix "
+    if ! read -r answer; then
+      echo
+      answer="$default"
+    fi
+    answer="${answer:l}"
+    [[ -z "$answer" ]] && answer="$default"
+    case "$answer" in
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+      *) echo "[omz-sync installer] Please answer Y or N" ;;
+    esac
+  done
+}
+
 if [[ ! -f "$SOURCE_SCRIPT" ]]; then
   echo "[omz-sync installer] missing source script: $SOURCE_SCRIPT" >&2
   exit 1
@@ -25,6 +49,8 @@ chmod +x "$INSTALLED_SCRIPT"
 cat > "$SNIPPET_FILE" <<'EOF'
 # omz-sync bootstrap
 if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  # Allow re-running setup in the same shell after uninstall/reset.
+  unset OMZ_SYNC_LOADED
   source "$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
 EOF
@@ -34,15 +60,13 @@ cat <<'EOF'
 [omz-sync installer] Snippet that can be added to ~/.zshrc:
 
 if [[ -f "$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  # Allow re-running setup in the same shell after uninstall/reset.
+  unset OMZ_SYNC_LOADED
   source "$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
 EOF
 echo
-echo "[omz-sync installer] Do you want to add the snippet to $ZSHRC_FILE automatically? [Y/n]"
-read -r ADD_SNIPPET
-ADD_SNIPPET="${ADD_SNIPPET:-y}"
-
-if [[ "${ADD_SNIPPET:l}" == "y" || "${ADD_SNIPPET:l}" == "yes" ]]; then
+if prompt_yes_no "Do you want to add the snippet to $ZSHRC_FILE automatically?" "y"; then
   if [[ ! -f "$ZSHRC_FILE" ]]; then
     touch "$ZSHRC_FILE"
   fi
@@ -69,6 +93,8 @@ if (( SHOW_MANUAL_SNIPPET == 1 )); then
 Add this snippet to your ~/.zshrc:
 
 if [[ -f "\$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  # Allow re-running setup in the same shell after uninstall/reset.
+  unset OMZ_SYNC_LOADED
   source "\$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
 EOF
@@ -78,6 +104,8 @@ elif (( SNIPPET_ADDED == 1 || SNIPPET_ALREADY_PRESENT == 1 )); then
 Snippet used for ~/.zshrc:
 
 if [[ -f "\$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
+  # Allow re-running setup in the same shell after uninstall/reset.
+  unset OMZ_SYNC_LOADED
   source "\$HOME/.local/share/omz-sync/omz-sync.zsh"
 fi
 EOF

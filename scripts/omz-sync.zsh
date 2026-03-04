@@ -21,6 +21,7 @@ typeset -g OMZ_SYNC_LAST_HEAD_FILE="$OMZ_SYNC_CONFIG_HOME/last_remote_head"
 typeset -g OMZ_SYNC_LOCK_DIR="$OMZ_SYNC_CONFIG_HOME/.lock"
 typeset -g OMZ_SYNC_LAST_COMMIT_EPOCH=0
 typeset -g OMZ_SYNC_DEBOUNCE_SECONDS="${OMZ_SYNC_DEBOUNCE_SECONDS:-30}"
+typeset -g OMZ_SYNC_HOOKS_REGISTERED="${OMZ_SYNC_HOOKS_REGISTERED:-0}"
 
 omz_sync_log() {
   print -r -- "[omz-sync] $*"
@@ -535,8 +536,11 @@ omz_sync_init() {
   omz_sync_startup_pull_flow
 
   if autoload -Uz add-zsh-hook 2>/dev/null; then
-    add-zsh-hook precmd omz_sync_precmd_hook
-    add-zsh-hook zshexit omz_sync_exit_hook
+    if (( OMZ_SYNC_HOOKS_REGISTERED == 0 )); then
+      add-zsh-hook precmd omz_sync_precmd_hook
+      add-zsh-hook zshexit omz_sync_exit_hook
+      OMZ_SYNC_HOOKS_REGISTERED=1
+    fi
   else
     omz_sync_warn "add-zsh-hook unavailable; automatic periodic/exit sync disabled."
   fi
