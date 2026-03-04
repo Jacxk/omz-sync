@@ -89,27 +89,9 @@ else
 fi
 
 if (( SHOW_MANUAL_SNIPPET == 1 )); then
-  cat <<EOF
-Add this snippet to your ~/.zshrc:
-
-if [[ -f "\$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
-  # Allow re-running setup in the same shell after uninstall/reset.
-  unset OMZ_SYNC_LOADED
-  source "\$HOME/.local/share/omz-sync/omz-sync.zsh"
-fi
-EOF
-  echo
+  echo "[omz-sync installer] Add the snippet shown above to ~/.zshrc"
 elif (( SNIPPET_ADDED == 1 || SNIPPET_ALREADY_PRESENT == 1 )); then
-  cat <<EOF
-Snippet used for ~/.zshrc:
-
-if [[ -f "\$HOME/.local/share/omz-sync/omz-sync.zsh" ]]; then
-  # Allow re-running setup in the same shell after uninstall/reset.
-  unset OMZ_SYNC_LOADED
-  source "\$HOME/.local/share/omz-sync/omz-sync.zsh"
-fi
-EOF
-  echo
+  echo "[omz-sync installer] Snippet is configured in ~/.zshrc"
 fi
 
 cat <<EOF
