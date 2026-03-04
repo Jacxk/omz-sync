@@ -45,6 +45,25 @@ After install, load it in the current shell:
 source ~/.zshrc
 ```
 
+## Uninstall or reset
+
+Run:
+
+```bash
+zsh ./scripts/uninstall-omz-sync.zsh
+```
+
+The uninstaller interactively asks whether to:
+- remove the bootstrap snippet from `~/.zshrc`,
+- delete installed files in `~/.local/share/omz-sync`,
+- delete sync state in `~/.config/omz-sync` (including backups).
+
+After uninstall, run:
+
+```bash
+source ~/.zshrc
+```
+
 ## First-run behavior
 
 At first startup:
