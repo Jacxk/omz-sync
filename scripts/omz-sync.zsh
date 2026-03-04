@@ -15,6 +15,7 @@ typeset -g OMZ_SYNC_CONFIG_HOME="${OMZ_SYNC_CONFIG_HOME:-$HOME/.config/omz-sync}
 typeset -g OMZ_SYNC_DATA_HOME="${OMZ_SYNC_DATA_HOME:-$HOME/.local/share/omz-sync}"
 typeset -g OMZ_SYNC_REPO_DIR="${OMZ_SYNC_REPO_DIR:-$OMZ_SYNC_DATA_HOME/repo}"
 typeset -g OMZ_SYNC_GIT_HOST_BASE="${OMZ_SYNC_GIT_HOST_BASE:-https://github.com}"
+typeset -g OMZ_SYNC_REPO_MARKER_FILE="${OMZ_SYNC_REPO_MARKER_FILE:-.omz-sync-repo}"
 typeset -g OMZ_SYNC_CONFIG_FILE="$OMZ_SYNC_CONFIG_HOME/config.zsh"
 typeset -g OMZ_SYNC_TRACKED_FILE="$OMZ_SYNC_CONFIG_HOME/tracked_paths"
 typeset -g OMZ_SYNC_LAST_HEAD_FILE="$OMZ_SYNC_CONFIG_HOME/last_remote_head"
@@ -24,6 +25,7 @@ typeset -g OMZ_SYNC_LAST_COMMIT_EPOCH=0
 typeset -g OMZ_SYNC_DEBOUNCE_SECONDS="${OMZ_SYNC_DEBOUNCE_SECONDS:-30}"
 typeset -g OMZ_SYNC_HOOKS_REGISTERED="${OMZ_SYNC_HOOKS_REGISTERED:-0}"
 typeset -g OMZ_SYNC_READ_VALUE=""
+typeset -g OMZ_SYNC_PUBLISH_ENABLED="${OMZ_SYNC_PUBLISH_ENABLED:-1}"
 
 omz_sync_log() {
   print -r -- "[omz-sync] $*"
@@ -234,6 +236,9 @@ omz_sync_apply_repo_to_local() {
 }
 
 omz_sync_fetch_remote() {
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" != "1" ]]; then
+    return 0
+  fi
   (
     cd "$OMZ_SYNC_REPO_DIR" || return 1
     git fetch origin --prune >/dev/null 2>&1 || return 1
@@ -241,6 +246,9 @@ omz_sync_fetch_remote() {
 }
 
 omz_sync_remote_head() {
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" != "1" ]]; then
+    return 0
+  fi
   (
     cd "$OMZ_SYNC_REPO_DIR" || return 1
     git rev-parse "origin/$OMZ_SYNC_BRANCH" 2>/dev/null
@@ -255,6 +263,9 @@ omz_sync_local_head() {
 }
 
 omz_sync_checkout_remote_branch() {
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" != "1" ]]; then
+    return 0
+  fi
   (
     cd "$OMZ_SYNC_REPO_DIR" || return 1
     if git show-ref --verify --quiet "refs/remotes/origin/$OMZ_SYNC_BRANCH"; then
@@ -287,18 +298,25 @@ omz_sync_commit_and_push() {
   local reason="${1:-sync}"
   (
     cd "$OMZ_SYNC_REPO_DIR" || return 1
-    git add -A
-    if [[ -z "$(git status --porcelain)" ]]; then
+    git add -A -- home >/dev/null 2>&1 || true
+    if [[ -f "$OMZ_SYNC_REPO_MARKER_FILE" ]]; then
+      git add -- "$OMZ_SYNC_REPO_MARKER_FILE" >/dev/null 2>&1 || true
+    fi
+    local scope_status
+    scope_status="$(git status --porcelain -- home "$OMZ_SYNC_REPO_MARKER_FILE" 2>/dev/null)"
+    if [[ -z "$scope_status" ]]; then
       return 0
     fi
     local changed_files
-    changed_files="$(git status --porcelain | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')"
+    changed_files="$(print -r -- "$scope_status" | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')"
     local msg="omz-sync: $reason ($(date '+%Y-%m-%d %H:%M:%S'))"
     if [[ -n "$changed_files" ]]; then
       msg="$msg files: $changed_files"
     fi
     git commit -m "$msg" >/dev/null 2>&1 || return 1
-    git push origin "$OMZ_SYNC_BRANCH" >/dev/null 2>&1 || return 1
+    if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" == "1" ]]; then
+      git push origin "$OMZ_SYNC_BRANCH" >/dev/null 2>&1 || return 1
+    fi
   )
 }
 
@@ -382,6 +400,7 @@ omz_sync_write_config() {
 export OMZ_SYNC_REPO_SLUG="${OMZ_SYNC_REPO_SLUG}"
 export OMZ_SYNC_BRANCH="${OMZ_SYNC_BRANCH}"
 export OMZ_SYNC_REMOTE_URL="${OMZ_SYNC_REMOTE_URL}"
+export OMZ_SYNC_PUBLISH_ENABLED="${OMZ_SYNC_PUBLISH_ENABLED}"
 EOF
 }
 
@@ -391,6 +410,7 @@ omz_sync_setup_state_reset_runtime() {
   OMZ_SYNC_SETUP_REPO_SLUG=""
   OMZ_SYNC_SETUP_BRANCH=""
   OMZ_SYNC_SETUP_VISIBILITY=""
+  OMZ_SYNC_SETUP_PUBLISH=""
 }
 
 omz_sync_setup_state_load() {
@@ -410,6 +430,7 @@ export OMZ_SYNC_SETUP_HAS_REPO="${OMZ_SYNC_SETUP_HAS_REPO}"
 export OMZ_SYNC_SETUP_REPO_SLUG="${OMZ_SYNC_SETUP_REPO_SLUG}"
 export OMZ_SYNC_SETUP_BRANCH="${OMZ_SYNC_SETUP_BRANCH}"
 export OMZ_SYNC_SETUP_VISIBILITY="${OMZ_SYNC_SETUP_VISIBILITY}"
+export OMZ_SYNC_SETUP_PUBLISH="${OMZ_SYNC_SETUP_PUBLISH}"
 EOF
 }
 
@@ -424,17 +445,64 @@ omz_sync_reset_setup_state() {
   omz_sync_log "Setup recovery state cleared."
 }
 
+omz_sync_repo_is_marked() {
+  [[ -f "$OMZ_SYNC_REPO_DIR/$OMZ_SYNC_REPO_MARKER_FILE" ]]
+}
+
+omz_sync_write_repo_marker() {
+  mkdir -p "$OMZ_SYNC_REPO_DIR" || return 1
+  cat > "$OMZ_SYNC_REPO_DIR/$OMZ_SYNC_REPO_MARKER_FILE" <<EOF
+omz-sync-repo:1
+created_at:$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+repo_slug:${OMZ_SYNC_REPO_SLUG:-unknown}
+EOF
+}
+
+omz_sync_ensure_repo_identity() {
+  local mode="${1:-runtime}"
+  omz_sync_repo_is_marked && return 0
+
+  local has_history=0
+  (
+    cd "$OMZ_SYNC_REPO_DIR" || return 1
+    git rev-parse --verify HEAD >/dev/null 2>&1
+  ) && has_history=1
+
+  if (( has_history == 1 )); then
+    omz_sync_warn "Repository is not marked as an omz-sync repository."
+    if ! omz_sync_prompt "This repo may be unrelated. Convert it for omz-sync (adds $OMZ_SYNC_REPO_MARKER_FILE)?" "n"; then
+      omz_sync_warn "Refusing to use unverified repository to avoid overriding unrelated data."
+      return 1
+    fi
+  else
+    if [[ "$mode" == "existing_setup" ]]; then
+      if ! omz_sync_prompt "Repository is empty and unmarked. Initialize it as an omz-sync repository?" "y"; then
+        omz_sync_warn "Setup cancelled because repository was not initialized for omz-sync."
+        return 1
+      fi
+    fi
+  fi
+
+  omz_sync_write_repo_marker || return 1
+  return 0
+}
+
 omz_sync_init_repo_if_needed() {
   mkdir -p "$OMZ_SYNC_DATA_HOME" || return 1
   if [[ -d "$OMZ_SYNC_REPO_DIR/.git" ]]; then
     return 0
   fi
-  git clone "$OMZ_SYNC_REMOTE_URL" "$OMZ_SYNC_REPO_DIR" >/dev/null 2>&1 || {
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" == "1" && -n "${OMZ_SYNC_REMOTE_URL:-}" ]]; then
+    git clone "$OMZ_SYNC_REMOTE_URL" "$OMZ_SYNC_REPO_DIR" >/dev/null 2>&1 && return 0
+  fi
+  {
     mkdir -p "$OMZ_SYNC_REPO_DIR" || return 1
     (
       cd "$OMZ_SYNC_REPO_DIR" || return 1
       git init -b "$OMZ_SYNC_BRANCH" >/dev/null 2>&1 || return 1
-      git remote add origin "$OMZ_SYNC_REMOTE_URL" >/dev/null 2>&1 || return 1
+      if [[ -n "${OMZ_SYNC_REMOTE_URL:-}" ]]; then
+        git remote add origin "$OMZ_SYNC_REMOTE_URL" >/dev/null 2>&1 || true
+      fi
     )
   }
 }
@@ -453,7 +521,7 @@ omz_sync_validate_repo_slug() {
 
 omz_sync_bootstrap_first_time() {
   omz_sync_log "First-time setup"
-  local has_repo repo_slug branch visibility create_ok
+  local has_repo repo_slug branch visibility create_ok publish_now
   local default_branch="main"
   has_repo=0
   omz_sync_setup_state_load || omz_sync_warn "Could not load setup recovery state."
@@ -479,6 +547,8 @@ omz_sync_bootstrap_first_time() {
   fi
 
   if (( has_repo == 1 )); then
+    OMZ_SYNC_PUBLISH_ENABLED=1
+    OMZ_SYNC_SETUP_PUBLISH="1"
     if [[ -n "$OMZ_SYNC_SETUP_REPO_SLUG" ]]; then
       repo_slug="$OMZ_SYNC_SETUP_REPO_SLUG"
     fi
@@ -491,7 +561,7 @@ omz_sync_bootstrap_first_time() {
         omz_sync_warn "Saved repo $repo_slug is not accessible anymore; please enter it again."
         repo_slug=""
       fi
-      if ! omz_sync_read_value "Enter repo as owner/name (for example: yanluis/omz-sync)"; then
+      if ! omz_sync_read_value "Enter existing sync repo as owner/name (for example: yanluis/omz-sync)"; then
         return 1
       fi
       repo_slug="$OMZ_SYNC_READ_VALUE"
@@ -526,6 +596,7 @@ omz_sync_bootstrap_first_time() {
     omz_sync_write_config || return 1
     omz_sync_write_default_tracked || return 1
     omz_sync_init_repo_if_needed || return 1
+    omz_sync_ensure_repo_identity "existing_setup" || return 1
     if omz_sync_prompt "Load saved version from GitHub now?" "y"; then
       omz_sync_startup_pull_flow 1
     fi
@@ -535,7 +606,7 @@ omz_sync_bootstrap_first_time() {
 
   local guessed_owner
   guessed_owner="$(git config --global github.user 2>/dev/null)"
-  omz_sync_log "No existing repo selected. Enter the repo to create/use for first sync."
+  omz_sync_log "No existing repo selected. Enter the repository where omz-sync data will live."
   if [[ -n "$OMZ_SYNC_SETUP_REPO_SLUG" ]]; then
     repo_slug="$OMZ_SYNC_SETUP_REPO_SLUG"
   fi
@@ -551,7 +622,7 @@ omz_sync_bootstrap_first_time() {
         repo_slug=""
       fi
     fi
-    omz_sync_read_value "New repo slug owner/name" "${guessed_owner}/omz-sync" || return 1
+    omz_sync_read_value "Sync repository slug (owner/name, for example: yanluis/omz-sync)" "${guessed_owner}/omz-sync" || return 1
     repo_slug="$OMZ_SYNC_READ_VALUE"
     if [[ -z "$repo_slug" ]]; then
       omz_sync_warn "Repository cannot be empty. Use owner/name."
@@ -588,13 +659,26 @@ omz_sync_bootstrap_first_time() {
     OMZ_SYNC_SETUP_STAGE="new_repo_visibility_selected"
     omz_sync_setup_state_save || omz_sync_warn "Could not save setup recovery state."
   fi
+  if [[ -n "$OMZ_SYNC_SETUP_PUBLISH" ]]; then
+    OMZ_SYNC_PUBLISH_ENABLED="$OMZ_SYNC_SETUP_PUBLISH"
+  else
+    if omz_sync_prompt "Publish this sync repository to GitHub now?" "y"; then
+      publish_now=1
+    else
+      publish_now=0
+    fi
+    OMZ_SYNC_PUBLISH_ENABLED="$publish_now"
+    OMZ_SYNC_SETUP_PUBLISH="$publish_now"
+    OMZ_SYNC_SETUP_STAGE="new_repo_publish_selected"
+    omz_sync_setup_state_save || omz_sync_warn "Could not save setup recovery state."
+  fi
   OMZ_SYNC_REPO_SLUG="$repo_slug"
   OMZ_SYNC_BRANCH="$branch"
   OMZ_SYNC_REMOTE_URL="$(omz_sync_build_remote_url "$repo_slug")"
   omz_sync_write_config || return 1
   omz_sync_write_default_tracked || return 1
 
-  if command -v gh >/dev/null 2>&1; then
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" == "1" ]] && command -v gh >/dev/null 2>&1; then
     if omz_sync_prompt "Create GitHub repo automatically with gh?" "y"; then
       if gh repo create "$repo_slug" "--$visibility" >/dev/null 2>&1; then
         create_ok=1
@@ -608,12 +692,16 @@ omz_sync_bootstrap_first_time() {
   fi
 
   omz_sync_init_repo_if_needed || return 1
+  omz_sync_ensure_repo_identity "new_setup" || return 1
   local tracked_list
   tracked_list="$(omz_sync_expand_tracked_paths)" || return 1
   print -r -- "$tracked_list" | omz_sync_copy_local_to_repo
   omz_sync_commit_and_push "initial sync" || {
     omz_sync_warn "Initial push failed. Ensure repo exists and auth is configured."
   }
+  if [[ "${OMZ_SYNC_PUBLISH_ENABLED:-1}" != "1" ]]; then
+    omz_sync_log "Publish skipped. Local sync repo initialized; enable publishing later to share across machines."
+  fi
   omz_sync_setup_state_clear
 }
 
@@ -622,9 +710,10 @@ omz_sync_load_config() {
     return 1
   fi
   source "$OMZ_SYNC_CONFIG_FILE"
-  if [[ -z "${OMZ_SYNC_REMOTE_URL:-}" || -z "${OMZ_SYNC_BRANCH:-}" ]]; then
+  if [[ -z "${OMZ_SYNC_BRANCH:-}" ]]; then
     return 1
   fi
+  OMZ_SYNC_PUBLISH_ENABLED="${OMZ_SYNC_PUBLISH_ENABLED:-1}"
   return 0
 }
 
@@ -650,6 +739,7 @@ omz_sync_init() {
     omz_sync_warn "Could not initialize local sync repo."
     return 0
   }
+  omz_sync_ensure_repo_identity "runtime" || return 0
 
   omz_sync_startup_pull_flow
 

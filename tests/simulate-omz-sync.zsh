@@ -55,6 +55,11 @@ seed_remote_repo() {
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="remote-theme"
 EOF
+  cat > "$work/.omz-sync-repo" <<'EOF'
+omz-sync-repo:1
+created_at:2026-01-01T00:00:00Z
+repo_slug:alice/omz-existing
+EOF
   cat > "$work/home/.oh-my-zsh/custom/themes/remote-theme.zsh-theme" <<'EOF'
 PROMPT="%F{green}%n@%m%f %1~ %# "
 EOF
@@ -96,9 +101,10 @@ omz_sync_read_value() {
   local question="$1"
   local default_value="${2:-}"
   case "$question" in
-    *"Enter repo as owner/name"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
+    *"existing sync repo as owner/name"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
+    *"owner/name"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
     *"Branch name"*) OMZ_SYNC_READ_VALUE="main"; return 0 ;;
-    *"New repo slug owner/name"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
+    *"Sync repository slug"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
     *"Repo visibility"*) OMZ_SYNC_READ_VALUE="private"; return 0 ;;
   esac
   OMZ_SYNC_READ_VALUE="$default_value"

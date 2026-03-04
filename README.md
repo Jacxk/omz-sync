@@ -79,6 +79,7 @@ At first startup:
    - ask if you want to load saved version now.
 3. If no:
    - ask repo slug, branch, visibility,
+   - ask whether to publish immediately,
    - optionally create via `gh`,
    - initialize and push current local config.
 
@@ -89,6 +90,11 @@ To clear only this recovery state (without deleting full sync config), run:
 ```zsh
 omz_sync_reset_setup_state
 ```
+
+## Repository safety check
+
+`omz-sync` writes a repository marker file (`.omz-sync-repo`) and verifies it before syncing.
+If the marker is missing, it asks before converting the repository so it does not accidentally override unrelated repos.
 
 ## Notes
 
