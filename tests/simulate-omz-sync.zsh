@@ -96,12 +96,13 @@ omz_sync_read_value() {
   local question="$1"
   local default_value="${2:-}"
   case "$question" in
-    *"Enter repo as owner/name"*) print -r -- "alice/omz-existing"; return 0 ;;
-    *"Branch name"*) print -r -- "main"; return 0 ;;
-    *"New repo slug owner/name"*) print -r -- "alice/omz-existing"; return 0 ;;
-    *"Repo visibility"*) print -r -- "private"; return 0 ;;
+    *"Enter repo as owner/name"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
+    *"Branch name"*) OMZ_SYNC_READ_VALUE="main"; return 0 ;;
+    *"New repo slug owner/name"*) OMZ_SYNC_READ_VALUE="alice/omz-existing"; return 0 ;;
+    *"Repo visibility"*) OMZ_SYNC_READ_VALUE="private"; return 0 ;;
   esac
-  print -r -- "$default_value"
+  OMZ_SYNC_READ_VALUE="$default_value"
+  return 0
 }
 
 assert_contains() {

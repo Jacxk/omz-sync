@@ -82,6 +82,14 @@ At first startup:
    - optionally create via `gh`,
    - initialize and push current local config.
 
+If setup is interrupted, `omz-sync` saves progress to `~/.config/omz-sync/setup_state.zsh` and resumes from the last completed step on next startup.
+
+To clear only this recovery state (without deleting full sync config), run:
+
+```zsh
+omz_sync_reset_setup_state
+```
+
 ## Notes
 
 - Requires `git`.
